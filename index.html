@@ -100,7 +100,7 @@ def on_load(req):
         document['status'].text = "Error 404: No encontré sunflowers.json"
 
 document['status'].text = "Descargando datos pesados... espera un momento"
-ajax.get("sunflowers.json", oncomplete=on_load)
+ajax.get("sunflowers_web.json", oncomplete=on_load)
     </script>
 </body>
 </html>
