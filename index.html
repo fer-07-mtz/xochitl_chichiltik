@@ -8,8 +8,8 @@
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython_stdlib.js"></script>
     <style>
         body { margin: 0; background-color: #1a1a1a; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; overflow: hidden; color: white; font-family: sans-serif; }
-        #turtle-canvas { background-color: black; border: 2px solid #555; }
-        #status { margin-bottom: 15px; font-size: 18px; color: #ffeb3b; font-weight: bold; }
+        #turtle-canvas { background-color: black; border: 2px solid #555; border-radius: 10px; }
+        #status { margin-bottom: 15px; font-size: 22px; color: #ffeb3b; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body onload="brython()">
@@ -34,30 +34,19 @@ def start_drawing(regions):
     t.hideturtle()
     t.speed(0)
     
-    # --- ESCANEO DE SUPERVIVENCIA ---
+    # 1. Escaneo para encuadre
     all_pts = []
-    for r in regions:
-        all_pts.extend(r['contour'])
+    for r in regions: all_pts.extend(r['contour'])
     
-    # Extraer todas las X y todas las Y
     xs = [p[0] for p in all_pts]
     ys = [p[1] for p in all_pts]
-    
-    # Encontrar los extremos reales del dibujo
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
     
-    # Calcular el tamaño real del dibujo
-    dibujo_ancho = max_x - min_x
-    dibujo_alto = max_y - min_y
-    
-    # Ajustar escala para que ocupe el 90% del cuadro negro
-    # Usamos un valor pequeño por si acaso para que NO sea gigante
-    escala = (canvas.width * 0.9) / max(dibujo_ancho, dibujo_alto, 1)
-    
-    # CENTRO REAL DEL DIBUJO
-    centro_x = (min_x + max_x) / 2
-    centro_y = (min_y + max_y) / 2
+    dib_w = max_x - min_x
+    dib_h = max_y - min_y
+    scale = (canvas.width * 0.9) / max(dib_w, dib_h, 1)
+    cx, cy = (min_x + max_x) / 2, (min_y + max_y) / 2
 
     def draw_step(i):
         if i >= len(regions):
@@ -65,28 +54,32 @@ def start_drawing(regions):
             return
             
         r = regions[i]
-        pts = r['contour']
-        
-        # Color del archivo
+        # CORRECCIÓN DE COLOR (Si es menor a 1, multiplicar por 255)
         c = r['color']
-        color_hex = '#%02x%02x%02x' % (int(c[0]), int(c[1]), int(c[2]))
-            
+        rgb = []
+        for val in c:
+            if max(c) <= 1.0: # Si los colores están en escala 0-1
+                rgb.append(int(val * 255))
+            else:
+                rgb.append(int(val))
+        
+        # Si el color es demasiado oscuro (negro), lo saltamos para que no tape
+        if sum(rgb) < 30: 
+            timer.set_timeout(lambda: draw_step(i + 1), 1)
+            return
+
+        color_hex = '#%02x%02x%02x' % (rgb[0], rgb[1], rgb[2])
+        
         t.penup()
-        t.color(color_hex)
         t.fillcolor(color_hex)
+        t.color(color_hex)
         
-        # EL SECRETO: Restar el centro y multiplicar por escala
-        # Ponemos el primer punto
-        x0 = (pts[0][0] - centro_x) * escala
-        y0 = (centro_y - pts[0][1]) * escala
-        t.goto(x0, y0)
-        
+        pts = r['contour']
+        t.goto((pts[0][0] - cx) * scale, (cy - pts[0][1]) * scale)
         t.pendown()
         t.begin_fill()
         for p in pts[1:]:
-            xi = (p[0] - centro_x) * escala
-            yi = (centro_y - p[1]) * escala
-            t.goto(xi, yi)
+            t.goto((p[0] - cx) * scale, (cy - p[1]) * scale)
         t.end_fill()
         
         timer.set_timeout(lambda: draw_step(i + 1), 1)
@@ -95,20 +88,8 @@ def start_drawing(regions):
 
 def on_load(req):
     if req.status == 200 or req.status == 0:
-        data = json.loads(req.text)
-        # --- ESTO NOS DIRÁ LA VERDAD ---
-        print(f"DEBUG: Cantidad de regiones: {len(data)}")
-        if len(data) > 0:
-            puesto_uno = data[0]['contour'][0]
-            color_uno = data[0]['color']
-            print(f"DEBUG: Primer punto: {puesto_uno}")
-            print(f"DEBUG: Primer color: {color_uno}")
-        # -------------------------------
-        start_drawing(data)
-    else:
-        document['status'].text = "No se encontró sunflowers_web.json"
+        start_drawing(json.loads(req.text))
 
-# Asegúrate que este nombre es el del archivo de 125KB
 ajax.get("sunflowers_web.json", oncomplete=on_load)
     </script>
 </body>
