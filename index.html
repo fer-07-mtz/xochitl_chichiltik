@@ -34,25 +34,30 @@ def start_drawing(regions):
     t.hideturtle()
     t.speed(0)
     
-    # 1. Escaneo de coordenadas
+    # --- ESCANEO DE SUPERVIVENCIA ---
     all_pts = []
     for r in regions:
         all_pts.extend(r['contour'])
     
+    # Extraer todas las X y todas las Y
     xs = [p[0] for p in all_pts]
     ys = [p[1] for p in all_pts]
     
+    # Encontrar los extremos reales del dibujo
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
     
-    data_w = max_x - min_x
-    data_h = max_y - min_y
+    # Calcular el tamaño real del dibujo
+    dibujo_ancho = max_x - min_x
+    dibujo_alto = max_y - min_y
     
-    # Ajuste de escala (90% del cuadro)
-    scale = (canvas.width * 0.9) / max(data_w, data_h) if max(data_w, data_h) > 0 else 1
+    # Ajustar escala para que ocupe el 90% del cuadro negro
+    # Usamos un valor pequeño por si acaso para que NO sea gigante
+    escala = (canvas.width * 0.9) / max(dibujo_ancho, dibujo_alto, 1)
     
-    cx = (min_x + max_x) / 2
-    cy = (min_y + max_y) / 2
+    # CENTRO REAL DEL DIBUJO
+    centro_x = (min_x + max_x) / 2
+    centro_y = (min_y + max_y) / 2
 
     def draw_step(i):
         if i >= len(regions):
@@ -62,24 +67,26 @@ def start_drawing(regions):
         r = regions[i]
         pts = r['contour']
         
-        # --- TRUCO DE COLOR ---
-        # Si el color falla, usamos amarillo por defecto para que "aparezca"
-        try:
-            c = r['color']
-            color_hex = '#%02x%02x%02x' % (int(c[0]), int(c[1]), int(c[2]))
-        except:
-            color_hex = "yellow"
+        # Color del archivo
+        c = r['color']
+        color_hex = '#%02x%02x%02x' % (int(c[0]), int(c[1]), int(c[2]))
             
         t.penup()
         t.color(color_hex)
         t.fillcolor(color_hex)
         
-        # Dibujar el pétalo
-        t.goto((pts[0][0] - cx) * scale, (cy - pts[0][1]) * scale)
+        # EL SECRETO: Restar el centro y multiplicar por escala
+        # Ponemos el primer punto
+        x0 = (pts[0][0] - centro_x) * escala
+        y0 = (centro_y - pts[0][1]) * escala
+        t.goto(x0, y0)
+        
         t.pendown()
         t.begin_fill()
         for p in pts[1:]:
-            t.goto((p[0] - cx) * scale, (cy - p[1]) * scale)
+            xi = (p[0] - centro_x) * escala
+            yi = (centro_y - p[1]) * escala
+            t.goto(xi, yi)
         t.end_fill()
         
         timer.set_timeout(lambda: draw_step(i + 1), 1)
@@ -93,6 +100,7 @@ def on_load(req):
     else:
         document['status'].text = "No se encontró sunflowers_web.json"
 
+# Asegúrate que este nombre es el del archivo de 125KB
 ajax.get("sunflowers_web.json", oncomplete=on_load)
     </script>
 </body>
