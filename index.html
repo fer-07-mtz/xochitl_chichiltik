@@ -7,45 +7,65 @@
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython.min.js"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython_stdlib.js"></script>
     <style>
-        body { margin: 0; background-color: black; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        body { 
+            margin: 0; 
+            background-color: black; 
+            display: flex; 
+            flex-direction: column;
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            overflow: hidden;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
         #turtle-canvas { border: none; }
+        #loading { position: absolute; top: 20px; font-size: 1.2em; }
     </style>
 </head>
-
 <body onload="brython()">
+    <div id="loading">Cargando tus flores... (esto puede tardar unos segundos)</div>
     <div id="turtle-canvas"></div>
 
     <script type="text/python">
 import turtle
 import json
-from browser import document, window, ajax
-
+from browser import document, window, ajax, timer
 
 def draw_the_flowers(regions):
-    screen = turtle.Screen()
-    screen.setup(800, 800)
-    # En Brython, el canvas se vincula así:
+    # Quitamos el mensaje de carga
+    document['loading'].style.display = 'none'
+    
     canvas = document['turtle-canvas']
     turtle.set_defaults(canvas=canvas)
+    
+    screen = turtle.Screen()
+    screen.setup(800, 800)
     
     t = turtle.Turtle()
     t.hideturtle()
     t.speed(0)
     
-    # Calcular límites para centrar
+    # Optimizamos el cálculo de límites para no saturar la memoria
     all_points = [(p[0], p[1]) for r in regions for p in r['contour']]
-    min_x = min(p[0] for p in all_points)
-    max_x = max(p[0] for p in all_points)
-    min_y = min(p[1] for p in all_points)
-    max_y = max(p[1] for p in all_points)
+    xs = [p[0] for p in all_points]
+    ys = [p[1] for p in all_points]
+    
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
     
     width = max_x - min_x
     height = max_y - min_y
-    scale = min(600 / width, 600 / height)
+    scale = min(650 / width, 650 / height)
     center_x = (min_x + max_x) / 2
     center_y = (min_y + max_y) / 2
-    
-    for region in regions:
+
+    # Función para dibujar por partes (evita que la página se bloquee)
+    def draw_step(index):
+        if index >= len(regions):
+            return
+            
+        region = regions[index]
         color = '#{:02x}{:02x}{:02x}'.format(
             int(region['color'][0]),
             int(region['color'][1]),
@@ -69,14 +89,23 @@ def draw_the_flowers(regions):
 
         t.goto(x0, y0)
         t.end_fill()
+        
+        # Dibujamos la siguiente región después de un breve descanso
+        timer.set_timeout(lambda: draw_step(index + 1), 1)
 
-# Función para cargar el JSON en la web
+    draw_step(0)
+
 def on_complete(req):
     if req.status == 200 or req.status == 0:
-        data = json.loads(req.text)
-        draw_the_flowers(data)
+        try:
+            data = json.loads(req.text)
+            draw_the_flowers(data)
+        except Exception as e:
+            document['loading'].text = f"Error al procesar datos: {e}"
+    else:
+        document['loading'].text = "No se pudo cargar el archivo sunflowers.json"
 
-# Petición para obtener el archivo sunflowers.json
+# Cargamos el JSON
 req = ajax.ajax()
 req.bind('complete', on_complete)
 req.open('GET', 'sunflowers.json', True)
