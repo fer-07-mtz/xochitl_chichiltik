@@ -96,6 +96,14 @@ def start_drawing(regions):
 def on_load(req):
     if req.status == 200 or req.status == 0:
         data = json.loads(req.text)
+        # --- ESTO NOS DIRÁ LA VERDAD ---
+        print(f"DEBUG: Cantidad de regiones: {len(data)}")
+        if len(data) > 0:
+            puesto_uno = data[0]['contour'][0]
+            color_uno = data[0]['color']
+            print(f"DEBUG: Primer punto: {puesto_uno}")
+            print(f"DEBUG: Primer color: {color_uno}")
+        # -------------------------------
         start_drawing(data)
     else:
         document['status'].text = "No se encontró sunflowers_web.json"
