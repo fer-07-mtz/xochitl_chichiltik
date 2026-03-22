@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flores Amarillas 🌻</title>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython.min.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython_stdlib.js"></script>
+    <style>
+        body { margin: 0; background-color: black; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        #turtle-canvas { border: none; }
+    </style>
+</head>
+<body onload="brython()">
+    <div id="turtle-canvas"></div>
+
+    <script type="text/python">
+import turtle
+import json
+from browser import document, window, ajax
+
+def draw_the_flowers(regions):
+    screen = turtle.Screen()
+    screen.setup(800, 800)
+    # En Brython, el canvas se vincula así:
+    canvas = document['turtle-canvas']
+    turtle.set_defaults(canvas=canvas)
+    
+    t = turtle.Turtle()
+    t.hideturtle()
+    t.speed(0)
+    
+    # Calcular límites para centrar
+    all_points = [(p[0], p[1]) for r in regions for p in r['contour']]
+    min_x = min(p[0] for p in all_points)
+    max_x = max(p[0] for p in all_points)
+    min_y = min(p[1] for p in all_points)
+    max_y = max(p[1] for p in all_points)
+    
+    width = max_x - min_x
+    height = max_y - min_y
+    scale = min(600 / width, 600 / height)
+    center_x = (min_x + max_x) / 2
+    center_y = (min_y + max_y) / 2
+    
+    for region in regions:
+        color = '#{:02x}{:02x}{:02x}'.format(
+            int(region['color'][0]),
+            int(region['color'][1]),
+            int(region['color'][2])
+        )
+        t.color(color, color)
+        
+        points = region['contour']
+        t.begin_fill()
+        t.penup()
+
+        x0 = (points[0][0] - center_x) * scale
+        y0 = (center_y - points[0][1]) * scale
+        t.goto(x0, y0)
+        t.pendown()
+
+        for point in points[1:]:
+            x = (point[0] - center_x) * scale
+            y = (center_y - point[1]) * scale
+            t.goto(x, y)
+
+        t.goto(x0, y0)
+        t.end_fill()
+
+# Función para cargar el JSON en la web
+def on_complete(req):
+    if req.status == 200 or req.status == 0:
+        data = json.loads(req.text)
+        draw_the_flowers(data)
+
+# Petición para obtener el archivo sunflowers.json
+req = ajax.ajax()
+req.bind('complete', on_complete)
+req.open('GET', 'sunflowers.json', True)
+req.send()
+    </script>
+</body>
+</html>
