@@ -19,73 +19,55 @@
 <script type="text/python">
 import turtle
 import json
-from browser import document, ajax, timer, window
+from browser import document, window, ajax, timer
 
 def start_drawing(regions):
-    status = document['status']
-    status.text = "Pintando flores... 🌻"
-    
     canvas = document['turtle-canvas']
-    # Forzamos un tamaño cuadrado estándar para evitar que se pierda
-    size = 500
-    canvas.width, canvas.height = size, size
+    # Ajustar el canvas al tamaño de la ventana
+    w, h = window.innerWidth, window.innerHeight
+    size = min(w, h, 600)
+    canvas.width = canvas.height = size
     
-    # Reiniciamos Turtle por completo
     turtle.set_defaults(canvas=canvas)
     t = turtle.Turtle()
     t.hideturtle()
     t.speed(0)
     
-    # --- ENCONTRAR EL DIBUJO ---
-    points = []
-    for r in regions:
-        points.extend(r.get('contour', []))
-    
-    if not points:
-        status.text = "Error: El archivo no tiene puntos"
-        return
-
-    xs = [p[0] for p in points]
-    ys = [p[1] for p in points]
+    # --- CÁLCULO DE ESCALA Y CENTRADO AUTOMÁTICO ---
+    all_pts = [p for r in regions for p in r['contour']]
+    xs = [p[0] for p in all_pts]
+    ys = [p[1] for p in all_pts]
     
     min_x, max_x = min(xs), max(xs)
     min_y, max_y = min(ys), max(ys)
     
-    # Centro y Escala
-    mid_x, mid_y = (min_x + max_x) / 2, (min_y + max_y) / 2
-    diff = max(max_x - min_x, max_y - min_y, 1)
-    scale = 450 / diff # Queremos que quepa en los 500px del canvas
+    data_w = max_x - min_x
+    data_h = max_y - min_y
+    # Escalar al 80% del canvas
+    scale = (size * 0.8) / max(data_w, data_h)
+    
+    offset_x = (min_x + max_x) / 2
+    offset_y = (min_y + max_y) / 2
 
     def draw_step(i):
         if i >= len(regions):
-            status.text = "¡Para ti! 🌻✨"
+            document['status'].text = "¡Para ti! 🌻✨"
             return
             
         r = regions[i]
-        c = r['color']
-        # Forzamos el color para que sea válido
-        color_hex = '#%02x%02x%02x' % (int(c[0]), int(c[1]), int(c[2]))
+        color = '#%02x%02x%02x' % (int(r['color'][0]), int(r['color'][1]), int(r['color'][2]))
         
-        pts = r.get('contour', [])
-        if len(pts) < 2:
-            timer.set_timeout(lambda: draw_step(i + 1), 1)
-            return
-
         t.penup()
-        t.color(color_hex)
-        t.fillcolor(color_hex)
+        t.color(color)
+        t.fillcolor(color)
         
-        # Transformación manual de coordenadas
-        # (x - centro) * escala
-        # (y - centro) * escala (invertido para Turtle)
-        start_x = (pts[0][0] - mid_x) * scale
-        start_y = (mid_y - pts[0][1]) * scale
-        
-        t.goto(start_x, start_y)
+        pts = r['contour']
+        # Mover al primer punto escalado
+        t.goto((pts[0][0] - offset_x) * scale, (offset_y - pts[0][1]) * scale)
         t.pendown()
         t.begin_fill()
         for p in pts[1:]:
-            t.goto((p[0] - mid_x) * scale, (mid_y - p[1]) * scale)
+            t.goto((p[0] - offset_x) * scale, (offset_y - p[1]) * scale)
         t.end_fill()
         
         timer.set_timeout(lambda: draw_step(i + 1), 1)
@@ -94,14 +76,12 @@ def start_drawing(regions):
 
 def on_load(req):
     if req.status == 200 or req.status == 0:
-        try:
-            data = json.loads(req.text)
-            start_drawing(data)
-        except:
-            document['status'].text = "Error de lectura"
+        data = json.loads(req.text)
+        start_drawing(data)
     else:
-        document['status'].text = "No se encontró el archivo ligero"
+        document['status'].text = "Error al cargar el dibujo"
 
+# USAR EL ARCHIVO LIGERO QUE CREASTE
 ajax.get("sunflowers_web.json", oncomplete=on_load)
     </script>
 </body>
