@@ -7,111 +7,101 @@
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython.min.js"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/brython@3.12.4/brython_stdlib.js"></script>
     <style>
-        body { 
-            margin: 0; 
-            background-color: black; 
-            display: flex; 
-            flex-direction: column;
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            overflow: hidden;
-            color: white;
-            font-family: Arial, sans-serif;
-        }
-        #turtle-canvas { border: none; }
-        #loading { position: absolute; top: 20px; font-size: 1.2em; }
+        body { margin: 0; background-color: black; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; overflow: hidden; color: white; font-family: sans-serif; }
+        #turtle-canvas { background-color: #050505; border: 1px solid #333; }
+        #status { position: absolute; top: 10px; font-size: 14px; color: #aaa; }
     </style>
 </head>
 <body onload="brython()">
-    <div id="loading">Cargando tus flores... (esto puede tardar unos segundos)</div>
+    <div id="status">Iniciando...</div>
     <div id="turtle-canvas"></div>
-
 
     <script type="text/python">
 import turtle
 import json
-from browser import document, window, ajax, timer
+from browser import document, ajax, timer
 
-def draw_the_flowers(regions):
-    document['loading'].style.display = 'none'
+def start_drawing(regions):
+    status = document['status']
+    status.text = "Dibujando pétalos..."
     
     canvas = document['turtle-canvas']
-    # Forzamos el tamaño del canvas en la web
     canvas.width = 600
     canvas.height = 600
     
     turtle.set_defaults(canvas=canvas)
-    
-    screen = turtle.Screen()
-    screen.setup(600, 600)
-    screen.bgcolor("black") # Aseguramos el fondo negro desde turtle
-    
     t = turtle.Turtle()
     t.hideturtle()
     t.speed(0)
     
-    all_points = [(p[0], p[1]) for r in regions for p in r['contour']]
-    xs = [p[0] for p in all_points]
-    ys = [p[1] for p in all_points]
+    # 1. Obtener todos los puntos para centrar
+    points_list = []
+    for r in regions:
+        for p in r['contour']:
+            points_list.append((p[0], p[1]))
     
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-    
-    width = max_x - min_x
-    height = max_y - min_y
-    # Ajustamos la escala para que sea un poco más pequeña y quepa bien
-    scale = min(500 / width, 500 / height)
-    center_x = (min_x + max_x) / 2
-    center_y = (min_y + max_y) / 2
+    if not points_list:
+        status.text = "Error: El archivo JSON está vacío"
+        return
 
-    def draw_step(index):
-        if index >= len(regions):
+    min_x = min(p[0] for p in points_list)
+    max_x = max(p[0] for p in points_list)
+    min_y = min(p[1] for p in points_list)
+    max_y = max(p[1] for p in points_list)
+    
+    # 2. Calcular escala (un poco más pequeña para asegurar que quepa)
+    w = max_x - min_x
+    h = max_y - min_y
+    scale = min(500/w, 500/h) if w > 0 and h > 0 else 1
+    
+    mid_x = (min_x + max_x) / 2
+    mid_y = (min_y + max_y) / 2
+
+    def draw_part(i):
+        if i >= len(regions):
+            status.text = "¡Listo! 🌻"
             return
             
-        region = regions[index]
-        color = '#{:02x}{:02x}{:02x}'.format(
-            int(region['color'][0]),
-            int(region['color'][1]),
-            int(region['color'][2])
-        )
-        t.color(color, color)
+        reg = regions[i]
+        c = reg['color']
+        hex_color = '#%02x%02x%02x' % (int(c[0]), int(c[1]), int(c[2]))
         
-        points = region['contour']
-        t.begin_fill()
         t.penup()
-
-        x0 = (points[0][0] - center_x) * scale
-        y0 = (center_y - points[0][1]) * scale
-        t.goto(x0, y0)
+        t.color(hex_color)
+        t.fillcolor(hex_color)
+        
+        pts = reg['contour']
+        # Mover al primer punto
+        start_x = (pts[0][0] - mid_x) * scale
+        start_y = (mid_y - pts[0][1]) * scale
+        t.goto(start_x, start_y)
+        
         t.pendown()
-
-        for point in points[1:]:
-            x = (point[0] - center_x) * scale
-            y = (center_y - point[1]) * scale
-            t.goto(x, y)
-
-        t.goto(x0, y0)
+        t.begin_fill()
+        for p in pts[1:]:
+            curr_x = (p[0] - mid_x) * scale
+            curr_y = (mid_y - p[1]) * scale
+            t.goto(curr_x, curr_y)
         t.end_fill()
         
-        # Aumentamos un poquito el tiempo para que el navegador no se sature
-        timer.set_timeout(lambda: draw_step(index + 1), 5)
+        # Dibujar siguiente bloque en 1ms
+        timer.set_timeout(lambda: draw_part(i + 1), 1)
 
-    draw_step(0)
+    draw_part(0)
 
-def on_complete(req):
+def load_json(req):
+    status = document['status']
     if req.status == 200 or req.status == 0:
         try:
             data = json.loads(req.text)
-            draw_the_flowers(data)
+            start_drawing(data)
         except Exception as e:
-            document['loading'].text = f"Error al procesar datos: {e}"
+            status.text = f"Error en JSON: {e}"
     else:
-        document['loading'].text = "No se pudo cargar el archivo sunflowers.json"
+        status.text = "No se encontró sunflowers.json"
 
-# Cargamos el JSON
 req = ajax.ajax()
-req.bind('complete', on_complete)
+req.bind('complete', load_json)
 req.open('GET', 'sunflowers.json', True)
 req.send()
     </script>
